@@ -1,129 +1,155 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
+# Dependencies and Setup
+import matplotlib.pyplot as plt
+import pandas as pd
+import scipy.stats as st
+import numpy as np
 
-# C extensions
-*.so
+# Study data files
+mouse_metadata_path = "/Users/laurane/Desktop/Mouse_metadata.csv"
+study_results_path = "/Users/laurane/Desktop/Study_results.csv"
 
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+    # Read the mouse data and the study results
+mouse_metadata = pd.read_csv(mouse_metadata_path)
+study_results = pd.read_csv(study_results_path)
 
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
+    # Combine the data into a single dataset
+combined_data= pd.merge(study_results,mouse_metadata, how="left", on="Mouse ID")
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
+    # Display the data table for preview
+combined_data.head()
 
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
+    # Checking the number of mice.
+numMice=combined_data["Mouse ID"].unique()
+lennumMice =len(numMice)
+lennumMice
+    # Getting the duplicate mice by ID number that shows up for Mouse ID and Timepoint. 
+duplicatemice = combined_data.loc[combined_data.duplicated(subset=['Mouse ID', 'Timepoint']),'Mouse ID'].unique()
+duplicatemice
+   # Optional: Get all the data for the duplicate mouse ID.
+dropmice = combined_data.loc[combined_data['Mouse ID']!="g989"]
+dropmice
+    # Create a clean DataFrame by dropping the duplicate mouse by its ID.
+cleandf= combined_data[combined_data['Mouse ID'].isin(duplicatemice)==False]
+cleandf.head()  
+   # Checking the number of mice in the clean DataFrame.
+realnummice= len(cleandf["Mouse ID"].unique())
+realnummice
+#Summary Statistics
+    # Generate a summary statistics table of mean, median, variance, standard deviation, and SEM of the tumor volume for each regimen
 
-# Translations
-*.mo
-*.pot
+    # Use groupby and summary statistical methods to calculate the following properties of each drug regimen: 
+    # mean
+mean = combined_data.groupby('Drug Regimen').mean()['Tumor Volume (mm3)']
+    #median
+med = combined_data.groupby('Drug Regimen').median()['Tumor Volume (mm3)']
+    #variance 
+var = combined_data.groupby('Drug Regimen').var()['Tumor Volume (mm3)']
+    #standard deviation
+std = combined_data.groupby('Drug Regimen').std()['Tumor Volume (mm3)']
+    #SEM of the tumor volume. 
+sem = combined_data.groupby('Drug Regimen').sem()['Tumor Volume (mm3)']    
+    # Assemble the resulting series into a single summary dataframe.
+results_data = pd.DataFrame({'Mean': mean, 
+                             'Median': med,
+                             'Variable': var, 
+                             'Standard Deviation': std, 
+                             'Standard Error': sem,
+                            })
+results_data
 
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
+    # Generate a summary statistics table of mean, median, variance, standard deviation, and SEM of the tumor volume for each regimen
+    # Using the aggregation method, produce the same summary statistics in a single line
 
-# Flask stuff:
-instance/
-.webassets-cache
+SummaryStat = combined_data.groupby('Drug Regimen').agg({'Tumor Volume (mm3)':['mean', 'median', 'var', 'std', 'sem']})
+SummaryStat
 
-# Scrapy stuff:
-.scrapy
+#Bar and Pie Charts
+    # Generate a bar plot showing the total number of timepoints for all mice tested for each drug regimen using Pandas.
 
-# Sphinx documentation
-docs/_build/
+counttestmicetret = cleandf.groupby(["Drug Regimen"])["Mouse ID"].count() 
+counttestmicetret.plot(kind='bar', x="Drug Regimen",y=counttestmicetret)
+counttestmicetret
+    # Generate a bar plot showing the total number of timepoints for all mice tested for each drug regimen using pyplot.
+plt.bar(counttestmicetret.index.values, counttestmicetret.values)
+plt.xticks(rotation=90)
+plt.title('Total Number of Mice tested per Treatment')
+plt.show()
+     # Generate a pie plot showing the distribution of female versus male mice using Pandas
+micegender = cleandf.groupby(["Sex"])["Sex"].count()
+micegender.plot(kind = "pie",autopct="%1.1f%%")
+micegender
+    # Generate a pie plot showing the distribution of female versus male mice using pyplot
+plt.pie(micegender.values,labels=micegender.index.values,autopct="%1.1f%%")
+plt.title("Distirbutuin of female versus male mice")
+plt.show()
+#Quartiles, Outliers and Boxplots
+     # Calculate the final tumor volume of each mouse across four of the treatment regimens:  
+     # Capomulin, Ramicane, Infubinol, and Ceftamin
+     # Start by getting the last (greatest) timepoint for each mouse
+maxtime = cleandf.groupby(["Mouse ID"])["Timepoint"].max()
+maxtime =maxtime.reset_index()
 
-# PyBuilder
-target/
+    # Merge this group df with the original dataframe to get the tumor volume at the last timepoint
+mergetumor = pd.merge(maxtime,cleandf,on=["Mouse ID", "Timepoint"],how="left")
+mergetumor
+  # Put treatments into a list for for loop (and later for plot labels)
+treatmentlist=['Capomulin', 'Ramicane', 'Infubinol','Ceftamin']
+    # Create empty list to fill with tumor vol data (for plotting)
+tumorvollist=[]
 
-# Jupyter Notebook
-.ipynb_checkpoints
+    # Calculate the IQR and quantitatively determine if there are any potential outliers. 
+for drug in treatmentlist: 
+    
+    # Locate the rows which contain mice on each drug and get the tumor volumes
+        tumorvol = mergetumor.loc[mergetumor["Drug Regimen"] == drug, 'Tumor Volume (mm3)']
+    
+    # add subset 
+        tumorvollist.append(tumorvol)
+    
+    # Determine outliers using upper and lower bounds
+        quar = tumorvol.quantile([.25,.5,.75])
+        lowquar = quar[0.25]
+        upquar = quar[0.75]
+        iqr = upquar-lowquar
+        lowbound = lowquar - (1.5*iqr)
+        upbound = upquar + (1.5*iqr)
+        outliers = tumorvol.loc[(tumorvol < lowbound) | (tumorvol > upbound)]
+        print(f"{drug}'s potential outliers: {outliers}")
+    # Generate a box plot of the final tumor volume of each mouse across four regimens of interest
+boxplot = dict()
+plt.boxplot(tumorvollist, labels = treatmentlist,flierprops=boxplot)
+plt.ylabel('Final Tumor Volume (mm3) of each mouse across four regimens')
+plt.show()
 
-# IPython
-profile_default/
-ipython_config.py
+#Line and Scatter Plots
+    # Generate a line plot of tumor volume vs. time point for a mouse treated with Capomulin
+capomulin = cleandf.loc[cleandf["Drug Regimen"] == "Capomulin"]
+capomulin
 
-# pyenv
-.python-version
+randomouse = capomulin.sample() 
+randomouse
+x = randomouse["Timepoint"] 
+y = randomouse["Tumor Volume (mm3)"] 
+plt.xlabel('Timepoint')
+plt.ylabel('Tumor Volume (mm3)')
+plt.plot(x,y,linestyle='solid')
+    # Generate a scatter plot of average tumor volume vs. mouse weight for the Capomulin regimen
+capomulintable = cleandf.loc[cleandf['Drug Regimen'] == "Capomulin"]
+capomulinav = capomulintable.groupby(['Mouse ID']).mean()
+plt.scatter(capomulinav['Weight (g)'],capomulinav['Tumor Volume (mm3)'])
+plt.xlabel('Weight (g)')
+plt.ylabel('Average Tumor Volume (mm3)')
+plt.show()
 
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
-
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow
-__pypackages__/
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
+#Correlation and Regression
+    # Calculate the correlation coefficient and linear regression model for mouse weight and average tumor volume for the Capomulin regimen
+weightav = capomulinav["Weight (g)"]
+tumorav = capomulinav["Tumor Volume (mm3)"]
+corr= st.pearsonr(weightav, tumorav)
+corr    
+model = st.linregress(weightav, tumorav)
+plt.scatter(weightav, tumorav)
+plt.plot(weightav, weightav*model[0]+model[1] , color="red")
+plt.xlabel('Weight (g)')
+plt.ylabel('Average Tumor Volume (mm3)')
+plt.show()
